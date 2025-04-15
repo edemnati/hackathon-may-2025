@@ -1,0 +1,7 @@
+pyodbc==5.2.0
+pandas
+semantic-kernel==1.22.1
+promptflow==1.17.2
+openai== 1.64.0
+promptflow-tracing==1.17.2
+azure-ai-projects==1.0.0b6
