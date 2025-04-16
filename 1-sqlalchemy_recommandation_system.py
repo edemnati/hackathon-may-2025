@@ -16,7 +16,7 @@ class Base(DeclarativeBase):
 
 
 class Recipes(Base):
-    __tablename__ = "recipes2"
+    __tablename__ = "recipes"
     rid: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     recipe_name: Mapped[str] = mapped_column()
     prep_time: Mapped[str] = mapped_column()
@@ -71,7 +71,7 @@ def setup(RUN_SETUP: bool = False):
 
     engine = create_engine(DATABASE_URI, echo=False)
 
-    sql_index = """CREATE INDEX hnsw_index_for_cosine_distance_similarity_search2 ON recipes2
+    sql_index = """CREATE INDEX hnsw_index_for_cosine_distance_similarity_search2 ON recipes
                     USING hnsw (recipe_vector vector_cosine_ops) WITH (m = 16, ef_construction = 64);
                 """
     # Create pgvector extension
@@ -100,7 +100,7 @@ def main():
     with Session(engine) as session:
         if RUN_SETUP:
             #Delete all data in the table
-            session.execute(text("DELETE FROM recipes2;"))
+            session.execute(text("DELETE FROM recipes;"))
             session.commit()
 
             print("Session started.")
@@ -112,7 +112,6 @@ def main():
             print(f"Data loaded from CSV. length: ", len(df_receipes))
             ct = 0
             for _,row in df_receipes.iterrows():
-                #embedding = azure_openai.create_embeddings('text-embedding-ada-002', f"{row['recipe_name']} {row['cuisine_path']} {row['ingredients']} {row['nutrition']} {row['directions']}")
                 receipe = Recipes(
                                 #rid=row['Unnamed: 0'],
                                 recipe_name=row['recipe_name'],
@@ -149,13 +148,13 @@ def main():
                     sql_satement = """WITH ro AS (
                                     SELECT ro.rid
                                     FROM
-                                        recipes2 ro
+                                        recipes ro
                                     WHERE
                                         ro.recipe_vector is null
                                         LIMIT 5000
                                 )
                                 UPDATE
-                                    recipes2 r
+                                    recipes r
                                 SET
                                     recipe_vector = azure_openai.create_embeddings('text-embedding-ada-002', r.recipe_name||' '||r.cuisine_path||' '||r.ingredients||' '||r.nutrition||' '||r.directions)
                                 FROM
