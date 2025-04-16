@@ -16,7 +16,7 @@ class Base(DeclarativeBase):
 
 
 class Recipes(Base):
-    __tablename__ = "recipes"
+    __tablename__ = "recipes2"
     rid: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     recipe_name: Mapped[str] = mapped_column()
     prep_time: Mapped[str] = mapped_column()
@@ -40,6 +40,7 @@ def setup(RUN_SETUP: bool = False):
     """Set up the database and create the tables."""
     
     # Define HNSW index to support vector similarity search through the vector_cosine_ops access method (cosine distance). The SQL operator for cosine distance is written as <=>.
+    """
     
     index = Index(
         "hnsw_index_for_cosine_distance_similarity_search",
@@ -48,7 +49,7 @@ def setup(RUN_SETUP: bool = False):
         postgresql_with={"m": 16, "ef_construction": 64},
         postgresql_ops={"recipe_vector": "vector_cosine_ops"},
     )
-
+"""
     # Connect to the database based on environment variables
     load_dotenv(".env", override=True)
     POSTGRES_HOST = os.environ["POSTGRES_HOST"]
@@ -70,13 +71,17 @@ def setup(RUN_SETUP: bool = False):
 
     engine = create_engine(DATABASE_URI, echo=False)
 
+    sql_index = """CREATE INDEX hnsw_index_for_cosine_distance_similarity_search2 ON recipes2
+                    USING hnsw (recipe_vector vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+                """
     # Create pgvector extension
     if RUN_SETUP:
         with engine.begin() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS azure_ai"))
-            conn.execute(text(f"select azure_ai.set_setting('azure_openai.endpoint','{os.environ.get("AZURE_OPENAI_ENDPOINT")}');"))
-            conn.execute(text(f"select azure_ai.set_setting('azure_openai.subscription_key', '{os.environ.get("AZURE_OPENAI_KEY")}');"))
+            conn.execute(text(sql_index))
+            conn.execute(text(f"select azure_ai.set_setting('azure_openai.endpoint','{os.environ.get("SQL_AZURE_OPENAI_ENDPOINT")}');"))
+            conn.execute(text(f"select azure_ai.set_setting('azure_openai.subscription_key', '{os.environ.get("SQL_AZURE_OPENAI_KEY")}');"))
         
         # Drop all tables (and indexes) defined in this model from the database, if they already exist
         Base.metadata.drop_all(engine)
@@ -87,7 +92,7 @@ def setup(RUN_SETUP: bool = False):
 
 
 def main():
-    RUN_SETUP = True
+    RUN_SETUP = False
     print("Starting the SQLAlchemy recommendation system...")
     engine = setup(RUN_SETUP)
     print("Database setup complete.")
@@ -95,7 +100,7 @@ def main():
     with Session(engine) as session:
         if RUN_SETUP:
             #Delete all data in the table
-            session.execute(text("DELETE FROM recipes;"))
+            session.execute(text("DELETE FROM recipes2;"))
             session.commit()
 
             print("Session started.")
@@ -135,20 +140,22 @@ def main():
                     print(f"Inserted {ct} recipes.")
             session.commit()
 
-            RUN_EMBEDDINGS = True
+            RUN_EMBEDDINGS = False
+            print("Inserting embeddings...")
             if RUN_EMBEDDINGS:
+                print("Start Inserting embeddings...")
                 #Add embeddings 
                 with engine.begin() as conn:
                     sql_satement = """WITH ro AS (
                                     SELECT ro.rid
                                     FROM
-                                        recipes ro
+                                        recipes2 ro
                                     WHERE
                                         ro.recipe_vector is null
                                         LIMIT 5000
                                 )
                                 UPDATE
-                                    recipes r
+                                    recipes2 r
                                 SET
                                     recipe_vector = azure_openai.create_embeddings('text-embedding-ada-002', r.recipe_name||' '||r.cuisine_path||' '||r.ingredients||' '||r.nutrition||' '||r.directions)
                                 FROM
@@ -172,9 +179,7 @@ def main():
                                          ), 
                                     {"rid": target_recipe.rid, "recipe_vector": json.dumps(target_recipe.recipe_vector.tolist())}).all()
     
-    '''
-    most_similars = session.scalars(select(Recipes).order_by(Recipes.recipe_vector.cosine_distance(target_recipe.recipe_vector)).limit(10))
-    '''
+    
     print(f"Five most similar recipes to '{target_recipe.recipe_name}':")
     for Recipe in most_similars:
         print(f"\t{Recipe.recipe_name}\t{Recipe.prep_time}")
